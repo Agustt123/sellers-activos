@@ -10,6 +10,9 @@ app.use('/sellersactivos/showall', require('./routes/showAll')); //probado
 app.use('/sellersactivos/addV2', require('./routes/addV2')); //probado 
 app.use('/sellersactivos/showallV2', require('./routes/showAllV2'));//probado
 app.use('/sellersactivos/deleteAllV2', require('./routes/deleteAllV2')); //probado
+app.use('/sellersactivos/reingresar', require('./routes/reingresar')); //probado
+app.use('/callback', require('./routes/incomes')); //probado
+
 
 app.listen(PORT, () => {
   console.log(`✅ Servidor corriendo en puerto ${PORT}`);
