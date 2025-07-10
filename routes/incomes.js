@@ -10,7 +10,7 @@ const sellersActivosCache = new Set();
 
 router.post("/incomes", async (req, res) => {
     const data = req.body;
-    return res.status(200).send("Webhook recibido");
+
     const incomeuserid = data.user_id ? data.user_id.toString() : "";
 
 
