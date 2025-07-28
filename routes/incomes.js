@@ -30,7 +30,7 @@ router.post("/incomes", async (req, res) => {
             sellersActivosCache.add(incomeuserid); // Guardar en cache local
             await procesarWebhook(data, res);
         } else {
-            res.status(403).send("Vendedor no activo");
+            // res.status(403).send("Vendedor no activo");
         }
     } catch (err) {
         console.error("❌ Error procesando webhook:", err.message);
