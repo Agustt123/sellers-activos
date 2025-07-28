@@ -30,7 +30,7 @@ async function procesarWebhook(data, res) {
     rabbitChannel.sendToQueue(queue, Buffer.from(JSON.stringify(data)), {
         persistent: true,
     });
-    res.status(200).send("Webhook recibido");
+    //res.status(200).send("Webhook recibido");
 }
 
 module.exports = {

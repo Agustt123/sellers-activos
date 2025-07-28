@@ -12,7 +12,7 @@ router.post("/incomes", async (req, res) => {
     const data = req.body;
 
     const incomeuserid = data.user_id ? data.user_id.toString() : "";
-
+    res.status(200).send("Webhook recibido");
 
 
 
