@@ -25,7 +25,7 @@ async function connectRabbit() {
     await rabbitChannel.assertQueue(queue, { durable: true });
 }
 
-async function procesarWebhook(data, res) {
+async function procesarWebhook(data) {
     await connectRabbit();
     rabbitChannel.sendToQueue(queue, Buffer.from(JSON.stringify(data)), {
         persistent: true,

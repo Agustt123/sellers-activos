@@ -19,7 +19,7 @@ router.post("/incomes", async (req, res) => {
     try {
         // 1. Verificar en cache local
         if (sellersActivosCache.has(incomeuserid)) {
-            await procesarWebhook(data, res);
+            await procesarWebhook(data);
             return;
         }
 
@@ -28,7 +28,7 @@ router.post("/incomes", async (req, res) => {
 
         if (isActive) {
             sellersActivosCache.add(incomeuserid); // Guardar en cache local
-            await procesarWebhook(data, res);
+            await procesarWebhook(data);
         } else {
             // res.status(403).send("Vendedor no activo");
         }
