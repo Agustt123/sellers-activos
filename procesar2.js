@@ -59,7 +59,7 @@ clientFF
 
 // RabbitMQ
 const rabbitMQUrl = "amqp://lightdata:QQyfVBKRbw6fBb@158.69.131.226:5672";
-const queue = "webhookml2";
+const queue = "webhookml";
 let rabbitConnection;
 let rabbitChannel;
 let isConnecting = false;
