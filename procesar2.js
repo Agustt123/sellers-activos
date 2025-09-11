@@ -2,12 +2,13 @@ const amqp = require("amqplib");
 const mysql = require("mysql2");
 const redis = require("redis");
 const axios = require("axios");
+const { enviarAlertaPorCorreo } = require("./mail");
 
 let pLimit;
 let retryCount = 0;
 const maxRetries = 5;
 
-// Flag para activar/desactivar dual write (1 = on, 0 = off)
+// Activa/desactiva escritura en la BD secundaria
 const DUAL_WRITE = process.env.DUAL_WRITE === "1";
 
 // Inicializar p-limit
@@ -66,22 +67,21 @@ let isConnecting = false;
 let rabbitConnectionActive = false;
 let hasStartedConsuming = false;
 
-// Pool primario (actual)
+// --------- BD PRIMARIA (la del original que anda) ----------
 const con = mysql.createPool({
-    host: "149.56.182.49",
-    port: 44353,
-    user: "root",
-    password: "4AVtLery67GFEd",
+    host: "bhsws10.ticdns.com",
+    user: "callback_u2u3",
+    password: "7L35HWuw,8,i",
     database: "callback_incomesML",
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
 });
 
-// Pool secundario (tu otra BD "más seria")
+// --------- BD SECUNDARIA (la otra que mencionamos) ----------
 const con2 = mysql.createPool({
     host: "149.56.182.49",
-    port: 44353, // o el que uses
+    port: 44353,
     user: "root",
     password: "4AVtLery67GFEd",
     database: "callback_incomesML",
@@ -108,7 +108,7 @@ con2.getConnection((err, connection) => {
     }
 });
 
-// Helper: INSERT IGNORE parametrizado en un pool
+// ---------- Helpers de insert idempotente ----------
 function insertIgnore(pool, tablename, sellerId, resource) {
     return new Promise((resolve) => {
         const sql = `INSERT IGNORE INTO ${tablename} (seller_id, resource) VALUES (?, ?)`;
@@ -124,14 +124,14 @@ function insertIgnore(pool, tablename, sellerId, resource) {
                     return resolve(false);
                 }
                 connection.release();
-                console.log(`✅ INSERT IGNORE en ${tablename} OK`);
+                console.log(`✅ INSERT IGNORE en ${tablename} OK (${sellerId}, ${resource})`);
                 resolve(true);
             });
         });
     });
 }
 
-// Helper: insertar en ambas BDs (primaria siempre; secundaria si DUAL_WRITE)
+// Inserta siempre en primaria y (si flag activo) también en secundaria
 async function insertEnAmbas(tablename, sellerId, resource) {
     const p1 = insertIgnore(con, tablename, sellerId, resource);
     const p2 = DUAL_WRITE ? insertIgnore(con2, tablename, sellerId, resource) : Promise.resolve(true);
@@ -139,8 +139,7 @@ async function insertEnAmbas(tablename, sellerId, resource) {
 
     if (!ok1) console.warn("⚠️ Primaria falló en insert.");
     if (DUAL_WRITE && !ok2) console.warn("⚠️ Secundaria falló en insert.");
-
-    return ok1; // tu lógica puede depender de que al menos la primaria quede consistente
+    return ok1;
 }
 
 // Iniciar RabbitMQ
@@ -167,10 +166,11 @@ async function initRabbitMQ() {
         retryCount = 0;
         console.log("✅ Nueva conexión y canal a RabbitMQ establecidos.");
 
+        // Igual que tu original: arranco consumo acá
         if (!hasStartedConsuming) {
             console.log("entrre");
             consumeQueue();
-            hasStartedConsuming = true;
+            // (no seteamos hasStartedConsuming = true para mantener tu comportamiento)
         }
     } catch (error) {
         console.error("❌ Error al conectar a RabbitMQ:", error.message);
@@ -227,7 +227,6 @@ async function enviarMensajeEstadoML(data, cola) {
 let cachedSellers = [];
 
 async function processWebhook(data2) {
-    // p-limit definido; no lo usamos acá, pero lo podés aplicar si paralelizás inserts
     const limit = pLimit(100);
     try {
         const incomeuserid = data2.user_id ? data2.user_id.toString() : "";
@@ -236,13 +235,48 @@ async function processWebhook(data2) {
         let now = new Date();
         now.setHours(now.getHours() - 3);
 
-        let exists = true; // tu lógica actual lo deja siempre en true
+        let exists = false;
+
+        if (topic === "flex-handshakes") {
+            exists = true;
+        } else {
+            if (cachedSellers.length === 0 || !cachedSellers.includes(incomeuserid)) {
+                try {
+                    const response = await axios.get(
+                        "https://callbackml.lightdata.app/MLProcesar/get/"
+                    );
+                    if (
+                        response.data &&
+                        response.data.success &&
+                        Array.isArray(response.data.sellers)
+                    ) {
+                        cachedSellers = response.data.sellers;
+                        exists = cachedSellers.includes(incomeuserid);
+                    } else {
+                        console.warn("⚠️ Respuesta inesperada del endpoint de sellers");
+                    }
+                } catch (error) {
+                    // silent fail
+                }
+            } else {
+                exists = true;
+            }
+        }
 
         if (exists) {
             let tablename = "";
             switch (topic) {
                 case "orders_v2":
+                    console.log("ordenessssssssss");
                     tablename = "db_orders";
+                    await enviarMensajeEstadoML(
+                        {
+                            resource,
+                            sellerid: incomeuserid,
+                            fecha: now.toISOString().slice(0, 19).replace("T", " "),
+                        },
+                        "ordenesFF"
+                    );
                     break;
 
                 case "shipments":
@@ -252,8 +286,8 @@ async function processWebhook(data2) {
                         sellerid: incomeuserid,
                         fecha: now.toISOString().slice(0, 19).replace("T", " "),
                     };
-                    await enviarMensajeEstadoML(mensajeRA, "shipments_states_callback_ml2");
-                    await enviarMensajeEstadoML(mensajeRA, "enviosml_ia2");
+                    await enviarMensajeEstadoML(mensajeRA, "shipments_states_callback_ml");
+                    await enviarMensajeEstadoML(mensajeRA, "enviosml_ia");
                     break;
 
                 case "flex-handshakes":
@@ -262,8 +296,12 @@ async function processWebhook(data2) {
             }
 
             if (tablename !== "") {
-                // 👉 Dual-write simple con INSERT IGNORE (sin SELECT previo)
-                await insertEnAmbas(tablename, incomeuserid, resource);
+                // ✅ Dual-write idempotente (sin SELECT previo)
+                const ok = await insertEnAmbas(tablename, incomeuserid, resource);
+                if (!ok) {
+                    // Si falla la primaria, mantenemos tu alerta
+                    enviarAlertaPorCorreo("Error en MySQL", `Falló insert en ${tablename}`);
+                }
             }
         }
     } catch (e) {
