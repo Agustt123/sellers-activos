@@ -9,7 +9,7 @@ let retryCount = 0;
 const maxRetries = 5;
 
 // Activa/desactiva escritura en la BD secundaria
-const DUAL_WRITE = process.env.DUAL_WRITE === "1";
+const DUAL_WRITE = 1
 
 // Inicializar p-limit
 async function initializePLimit() {
