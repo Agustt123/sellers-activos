@@ -39,4 +39,10 @@ router.post("/incomes", async (req, res) => {
 });
 
 
+router.post("/limpiar-cache", async (req, res) => {
+    sellersActivosCache.clear();
+    res.status(200).send({ status: true, message: "Cache limpiada" });
+});
+
+
 module.exports = router;
